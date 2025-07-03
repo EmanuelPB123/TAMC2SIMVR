@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Tanque 3D: Exploración y Control</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Incluye A-Frame -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <!-- Incluye A-Frame Extras para componentes útiles como movement-controls -->
+    <script src="https://unpkg.com/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
+    <style>
+        /* Estilos básicos para asegurar que la escena ocupe toda la pantalla */
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+        }
+
+        #scene-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #2c3e50;
+            /* Un color de fondo oscuro */
+        }
+
+        a-scene {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Estilos para los pads virtuales */
+        .virtual-pad-container {
+            position: fixed;
+            bottom: 20px;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+            z-index: 100;
+            /* Asegura que estén por encima de la escena 3D */
+            pointer-events: none;
+            /* Permite que los eventos de clic pasen a los pads */
+        }
+
+        .virtual-pad {
+            width: 120px;
+            height: 120px;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            /* Habilita los eventos de clic en los pads */
+            touch-action: none;
+            /* Previene el comportamiento de desplazamiento predeterminado del navegador */
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .virtual-pad-stick {
+            width: 60px;
+            height: 60px;
+            background-color: rgba(255, 255, 255, 0.6);
+            border-radius: 50%;
+            position: absolute;
+            transition: transform 0.05s ease-out;
+            /* Suaviza el movimiento del stick */
+        }
+
+        /* Estilos para el HUD */
+        #hud-container {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 101;
+            /* Asegura que esté por encima de todo lo demás */
+            display: none;
+            /* Inicialmente oculto, se muestra al montar el tanque */
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        /* Estilos para el botón de fuego */
+        .fire-button {
+            width: 100px;
+            height: 100px;
+            background-color: rgba(255, 0, 0, 0.6);
+            /* Rojo */
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            touch-action: none;
+            box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+            color: white;
+            font-weight: bold;
+            font-size: 1.2em;
+            cursor: pointer;
+            margin: 0 10px;
+            /* Margen para separar los botones */
+        }
+
+        /* Estilos para el nuevo botón de control (Mirar Alrededor) */
+        .control-button {
+            width: 100px;
+            height: 100px;
+            background-color: rgba(0, 128, 255, 0.6);
+            /* Azul */
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            touch-action: none;
+            box-shadow: 0 0 10px rgba(0, 128, 255, 0.5);
+            color: white;
+            font-weight: bold;
+            font-size: 1.2em;
+            cursor: pointer;
+            margin: 0 10px;
+            /* Margen para separar los botones */
+        }
+
+        /* Estilos para el botón de salir del tanque */
+        .exit-button {
+            width: 100px;
+            height: 100px;
+            background-color: rgba(255, 165, 0, 0.6); /* Naranja */
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            touch-action: none;
+            box-shadow: 0 0 10px rgba(255, 165, 0, 0.5);
+            color: white;
+            font-weight: bold;
+            font-size: 1.2em;
+            cursor: pointer;
+            margin: 0 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="scene-container">
+        <a-scene>
+            <a-assets>
+                <!-- Asset items for the GLB models -->
+                <a-asset-item id="model-base" src="/def/base.glb"></a-asset-item>
+                <a-asset-item id="model-turret" src="/def/turret.glb"></a-asset-item>
+                <a-asset-item id="model-cannon" src="/def/cannon.glb"></a-asset-item>
+            </a-assets>
+
+            <!-- Camera Rig: Used to move the camera in the exploration phase. -->
+            <a-entity id="camera-rig">
+                <!-- Camera: Initially with look-controls to look around. -->
+                <a-entity id="camera" camera look-controls position="0 1.7 0"></a-entity>
+            </a-entity>
+
+            <!-- Tank Entity (Base):
+                 Here we use the GLB model for the tank base. -->
+            <a-entity id="tank-base" gltf-model="#model-base" position="0 0.5 0" rotation="0 0 0" scale="1 1 1">
+                <!-- Tank Turret: This entity will rotate with the right pad when mounted.
+                     It's a child of tank-base so it moves with the tank, but rotates independently. -->
+                <a-entity id="tank-turret" gltf-model="#model-turret" position="0 0.0 0" scale="1 1 1">
+                    <!-- Tank Cannon: Child of the turret so it rotates with it.
+                         We've added an ID to be able to control it individually. -->
+                    <a-entity id="tank-cannon" gltf-model="#model-cannon" position="0 -0.1 0.15" scale="1 1 1"></a-entity>
+                </a-entity>
+            </a-entity>
+
+            <!-- Terrain: A large plane for the tank to move on -->
+            <a-plane position="0 0 -4" rotation="-90 0 0" width="50" height="50" color="#7CFC00"></a-plane>
+
+            <!-- Sky: A simple gradient for the background -->
+            <a-sky color="#87CEEB"></a-sky>
+
+            <!-- Lights: Add an ambient and a directional light to illuminate the scene -->
+<!--             <a-entity light="type: ambient; color: #BBB"></a-entity> -->
+            <a-entity light="type: directional; color: #FFF; intensity: 0.6" position="-1 1 1"></a-entity>
+        </a-scene>
+    </div>
+
+    <!-- Container for virtual pads -->
+    <div class="virtual-pad-container">
+        <div id="leftPad" class="virtual-pad">
+            <div id="leftStick" class="virtual-pad-stick"></div>
+        </div>
+        <!-- New button to toggle look around mode -->
+        <div id="lookAroundButton" class="control-button">
+            <span>MIRAR</span>
+        </div>
+        <!-- Fire button -->
+        <div id="fireButton" class="fire-button">
+            <span>FUEGO</span>
+        </div>
+        <!-- New button to exit the tank -->
+        <div id="exitTankButton" class="exit-button">
+            <span>SALIR</span>
+        </div>
+        <div id="rightPad" class="virtual-pad">
+            <div id="rightStick" class="virtual-pad-stick"></div>
+        </div>
+    </div>
+
+    <!-- Container for HUD -->
+    <div id="hud-container">
+        <div id="tankPos">Posición Tanque: X: 0.00 Y: 0.00 Z: 0.00</div>
+        <div id="tankRot">Rotación Tanque: Y: 0.00</div>
+        <div id="turretRot">Rotación Torreta: Y: 0.00</div>
+        <div id="cannonPitch">Inclinación Cañón: X: 0.00</div>
+    </div>
+
+    <script>
+        // Main game component that manages control phases
+        AFRAME.registerComponent('game-controller', {
+            schema: {
+                tankId: { type: 'string', default: 'tank-base' },
+                turretId: { type: 'string', default: 'tank-turret' },
+                cannonId: { type: 'string', default: 'tank-cannon' }, // Cannon ID
+                cameraId: { type: 'string', default: 'camera' },
+                cameraRigId: { type: 'string', default: 'camera-rig' },
+                mountDistance: { type: 'number', default: 3 }, // Distance to "mount" the tank
+                explorationSpeed: { type: 'number', default: 3 }, // Camera speed in exploration
+                tankSpeed: { type: 'number', default: 5 }, // Tank speed
+                tankRotationSpeed: { type: 'number', default: 90 }, // Tank rotation speed
+                turretRotationSpeed: { type: 'number', default: 60 }, // Turret rotation speed
+                cannonPitchSpeed: { type: 'number', default: 45 }, // Cannon pitch speed
+                leftPadId: { type: 'string', default: 'leftPad' },
+                rightPadId: { type: 'string', default: 'rightPad' },
+                fireButtonId: { type: 'string', default: 'fireButton' }, // Fire button ID
+                lookAroundButtonId: { type: 'string', default: 'lookAroundButton' }, // New: Look around button ID
+                exitTankButtonId: { type: 'string', default: 'exitTankButton' }, // New: Exit tank button ID
+                projectileSpeed: { type: 'number', default: 20 }, // Projectile speed
+                fireCooldown: { type: 'number', default: 500 }, // Cooldown time between shots in milliseconds
+                gravity: { type: 'number', default: 9.8 } // Gravity for projectiles
+            },
+
+            init: function () {
+                this.tank = document.getElementById(this.data.tankId);
+                this.turret = document.getElementById(this.data.turretId);
+                this.cannon = document.getElementById(this.data.cannonId); // Get reference to the cannon
+                this.camera = document.getElementById(this.data.cameraId);
+                this.cameraRig = document.getElementById(this.data.cameraRigId);
+                this.sceneEl = this.el.sceneEl; // Reference to the A-Frame scene
+
+                this.leftPad = document.getElementById(this.data.leftPadId);
+                this.rightPad = document.getElementById(this.data.rightPadId);
+                this.leftStick = document.getElementById('leftStick');
+                this.rightStick = document.getElementById('rightStick');
+                this.fireButton = document.getElementById(this.data.fireButtonId); // Get reference to the fire button
+                this.lookAroundButton = document.getElementById(this.data.lookAroundButtonId); // Get reference to the new button
+                this.exitTankButton = document.getElementById(this.data.exitTankButtonId); // Get reference to the exit tank button
+
+                // References to HUD elements
+                this.hudContainer = document.getElementById('hud-container');
+                this.tankPosDisplay = document.getElementById('tankPos');
+                this.tankRotDisplay = document.getElementById('tankRot');
+                this.turretRotDisplay = document.getElementById('turretRot');
+                this.cannonPitchDisplay = document.getElementById('cannonPitch');
+
+                this.isMounted = false; // Game state: false = exploration, true = mounted on tank
+                this.isLookingAround = false; // New state: true = look around mode (free camera), false = turret control
+                this.projectiles = []; // Array to store active projectiles
+                this.lastFireTime = 0; // To control fire cooldown
+                this.canMount = true; // New state: prevents immediate re-mounting after exiting
+
+                this.leftActive = false;
+                this.rightActive = false;
+                this.leftStartX = 0; this.leftStartY = 0;
+                this.rightStartX = 0; this.rightStartY = 0;
+                this.leftCurrentX = 0; this.leftCurrentY = 0;
+                this.rightCurrentX = 0; this.rightCurrentY = 0;
+
+                // Vectors for movement and rotation calculations
+                this.velocity = new THREE.Vector3();
+
+                this.setupPadListeners();
+                this.initialCameraSetup();
+            },
+
+            // Initial camera setup for the exploration phase
+            initialCameraSetup: function () {
+                // Set cameraRig's initial position at ground level, 10 units back from origin
+                this.cameraRig.setAttribute('position', '0 0 10');
+            },
+
+            // Sets up event listeners for virtual pads
+            setupPadListeners: function () {
+                // Left Pad
+                this.leftPad.addEventListener('mousedown', this.onLeftStart.bind(this));
+                this.leftPad.addEventListener('touchstart', this.onLeftStart.bind(this));
+                document.addEventListener('mouseup', this.onLeftEnd.bind(this));
+                document.addEventListener('touchend', this.onLeftEnd.bind(this));
+                document.addEventListener('mousemove', this.onLeftMove.bind(this));
+                document.addEventListener('touchmove', this.onLeftMove.bind(this));
+
+                // Right Pad
+                this.rightPad.addEventListener('mousedown', this.onRightStart.bind(this));
+                this.rightPad.addEventListener('touchstart', this.onRightStart.bind(this));
+                document.addEventListener('mouseup', this.onRightEnd.bind(this));
+                document.addEventListener('touchend', this.onRightEnd.bind(this));
+                document.addEventListener('mousemove', this.onRightMove.bind(this));
+                document.addEventListener('touchmove', this.onRightMove.bind(this));
+
+                // Fire Button
+                this.fireButton.addEventListener('mousedown', this.onFire.bind(this));
+                this.fireButton.addEventListener('touchstart', this.onFire.bind(this));
+
+                // Look Around Button
+                this.lookAroundButton.addEventListener('mousedown', this.toggleLookAround.bind(this));
+                this.lookAroundButton.addEventListener('touchstart', this.toggleLookAround.bind(this));
+
+                // Exit Tank Button
+                this.exitTankButton.addEventListener('mousedown', this.exitTank.bind(this));
+                this.exitTankButton.addEventListener('touchstart', this.exitTank.bind(this));
+            },
+
+            // Helper function to get event coordinates (mouse or touch)
+            getCoords: function (evt) {
+                if (evt.touches && evt.touches.length > 0) {
+                    return { x: evt.touches[0].clientX, y: evt.touches[0].clientY };
+                }
+                return { x: evt.clientX, y: evt.clientY };
+            },
+
+            // --- Left Pad Logic ---
+            onLeftStart: function (evt) {
+                evt.preventDefault();
+                this.leftActive = true;
+                const coords = this.getCoords(evt);
+                this.leftStartX = coords.x;
+                this.leftStartY = coords.y;
+                this.leftCurrentX = coords.x;
+                this.leftCurrentY = coords.y;
+                this.leftStick.style.transition = 'none';
+            },
+
+            onLeftMove: function (evt) {
+                if (!this.leftActive) return;
+                evt.preventDefault();
+                const coords = this.getCoords(evt);
+                this.leftCurrentX = coords.x;
+                this.leftCurrentY = coords.y;
+                this.updateStickPosition(this.leftPad, this.leftStick, this.leftStartX, this.leftStartY, this.leftCurrentX, this.leftCurrentY);
+            },
+
+            onLeftEnd: function () {
+                this.leftActive = false;
+                this.leftCurrentX = this.leftStartX;
+                this.leftCurrentY = this.leftStartY;
+                this.resetStickPosition(this.leftStick);
+            },
+
+            // --- Right Pad Logic ---
+            onRightStart: function (evt) {
+                evt.preventDefault();
+                this.rightActive = true;
+                const coords = this.getCoords(evt);
+                this.rightStartX = coords.x;
+                this.rightStartY = coords.y;
+                this.rightCurrentX = coords.x;
+                this.rightCurrentY = coords.y;
+                this.rightStick.style.transition = 'none';
+            },
+
+            onRightMove: function (evt) {
+                if (!this.rightActive) return;
+                evt.preventDefault();
+                const coords = this.getCoords(evt);
+                this.rightCurrentX = coords.x;
+                this.rightCurrentY = coords.y;
+                this.updateStickPosition(this.rightPad, this.rightStick, this.rightStartX, this.rightStartY, this.rightCurrentX, this.rightCurrentY);
+            },
+
+            onRightEnd: function () {
+                this.rightActive = false;
+                this.rightCurrentX = this.rightStartX;
+                this.rightCurrentY = this.rightStartY;
+                this.resetStickPosition(this.rightStick);
+            },
+
+            // --- Fire Button Logic ---
+            onFire: function () {
+                console.log('Fire button pressed. isMounted:', this.isMounted, 'isLookingAround:', this.isLookingAround);
+                if (this.isMounted && !this.isLookingAround) { // Only fire if mounted and NOT in look around mode
+                    const currentTime = performance.now();
+                    console.log('Cooldown check:', currentTime - this.lastFireTime, 'vs', this.data.fireCooldown);
+                    if (currentTime - this.lastFireTime > this.data.fireCooldown) {
+                        console.log('Firing cannon!');
+                        this.fireCannon();
+                        this.lastFireTime = currentTime;
+                    } else {
+                        console.log('Fire cooldown active.');
+                    }
+                } else {
+                    console.log('Cannot fire: Not mounted or in look around mode.');
+                }
+            },
+
+            // --- Look Around Button Logic ---
+            toggleLookAround: function () {
+                if (!this.isMounted) return; // Only allow toggling when mounted on the tank
+
+                this.isLookingAround = !this.isLookingAround;
+                console.log('Look Around Mode:', this.isLookingAround ? 'Activated' : 'Deactivated');
+
+                if (this.isLookingAround) {
+                    // Enable A-Frame's look-controls for free camera movement
+                    this.camera.setAttribute('look-controls', '');
+                    // Temporarily disable custom right pad input to avoid conflicts
+                    // The visual stick of the right pad will still move, but its input will not control the turret.
+                    // A-Frame's look-controls will take global mouse/touch control for camera rotation.
+                    this.rightPad.style.pointerEvents = 'none'; // Disable pad interaction
+                    this.rightStick.style.opacity = '0.3'; // Visual hint of disabled state
+                    this.fireButton.style.pointerEvents = 'none'; // Disable fire button in look around mode
+                    this.fireButton.style.opacity = '0.3';
+                } else {
+                    // Disable A-Frame's look-controls
+                    this.camera.removeAttribute('look-controls');
+                    // Re-enable custom right pad input for turret/cannon control
+                    this.rightPad.style.pointerEvents = 'auto';
+                    this.rightStick.style.opacity = '1'; // Reset visual hint
+                    this.fireButton.style.pointerEvents = 'auto'; // Enable fire button
+                    this.fireButton.style.opacity = '1';
+                }
+            },
+
+            // --- Helper functions for visual stick ---
+            updateStickPosition: function (pad, stick, startX, startY, currentX, currentY) {
+                const padRect = pad.getBoundingClientRect();
+                const padCenterX = padRect.left + padRect.width / 2;
+                const padCenterY = padRect.top + padRect.height / 2;
+                const maxRadius = padRect.width / 2 - stick.offsetWidth / 2;
+
+                let deltaX = currentX - padCenterX;
+                let deltaY = currentY - padCenterY;
+
+                const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+                if (distance > maxRadius) {
+                    const angle = Math.atan2(deltaY, deltaX);
+                    deltaX = Math.cos(angle) * maxRadius;
+                    deltaY = Math.sin(angle) * maxRadius;
+                }
+
+                stick.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+            },
+
+            resetStickPosition: function (stick) {
+                stick.style.transition = 'transform 0.2s ease-out';
+                stick.style.transform = 'translate(0, 0)';
+            },
+
+            // --- Main game logic in each tick (frame) ---
+            tick: function (time, deltaTime) {
+                const deltaSeconds = deltaTime / 1000;
+
+                if (!this.isMounted) {
+                    // Exploration Phase: Move the camera and check distance to the tank
+                    const cameraWorldPos = new THREE.Vector3();
+                    this.camera.object3D.getWorldPosition(cameraWorldPos); // Global camera position
+                    const tankWorldPos = new THREE.Vector3();
+                    this.tank.object3D.getWorldPosition(tankWorldPos); // Global tank position
+
+                    const distance = cameraWorldPos.distanceTo(tankWorldPos);
+
+                    // Only mount if close enough and canMount flag is true
+                    if (distance < this.data.mountDistance && this.canMount) {
+                        this.mountTank(); // If close, mount the tank
+                    } else {
+                        // Camera movement with the left pad in exploration mode
+                        if (this.leftActive) {
+                            const padRect = this.leftPad.getBoundingClientRect();
+                            const padCenterX = padRect.left + padRect.width / 2;
+                            const padCenterY = padRect.top + padRect.height / 2;
+                            const maxRadius = padRect.width / 2;
+
+                            const x = (this.leftCurrentX - padCenterX) / maxRadius; // Range from -1 to 1
+                            const y = (this.leftCurrentY - padCenterY) / maxRadius; // Range from -1 to 1
+
+                            // Get camera direction vectors (forward and right)
+                            const cameraObject = this.camera.object3D;
+                            // Get the horizontal forward vector
+                            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(cameraObject.quaternion);
+                            forward.y = 0; // Ensures movement is parallel to the ground
+                            forward.normalize(); // Normalize after adjusting Y
+
+                            // Get the horizontal right vector
+                            const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraObject.quaternion);
+                            right.y = 0; // Ensures movement is parallel to the ground
+                            right.normalize(); // Normalize after adjusting Y
+
+                            // Calculate the movement vector
+                            const moveVector = new THREE.Vector3();
+                            // Invert 'y' so up is forward (negative Z)
+                            moveVector.addScaledVector(forward, -y * this.data.explorationSpeed * deltaSeconds);
+                            moveVector.addScaledVector(right, x * this.data.explorationSpeed * deltaSeconds);
+
+                            this.cameraRig.object3D.position.add(moveVector); // Apply movement to the camera rig
+                        }
+
+                        // Camera rotation (look around) with the right pad in exploration mode
+                        if (this.rightActive) {
+                            const padRect = this.rightPad.getBoundingClientRect();
+                            const padCenterX = padRect.left + padRect.width / 2;
+                            const padCenterY = padRect.top + padRect.height / 2;
+                            const maxRadius = padRect.width / 2;
+
+                            const x = (this.rightCurrentX - padCenterX) / maxRadius;
+                            const y = (this.rightCurrentY - padCenterY) / maxRadius;
+
+                            // Horizontal rotation (yaw)
+                            const cameraRotationY = -x * this.data.turretRotationSpeed * deltaSeconds;
+                            this.camera.object3D.rotation.y += THREE.MathUtils.degToRad(cameraRotationY);
+
+                            // Vertical rotation (pitch), limited to avoid full turns
+                            const cameraRotationX = -y * this.data.turretRotationSpeed * deltaSeconds;
+                            let currentPitch = this.camera.object3D.rotation.x;
+                            let newPitch = currentPitch + THREE.MathUtils.degToRad(cameraRotationX);
+                            const maxPitch = THREE.MathUtils.degToRad(80); // Upper limit (look up)
+                            const minPitch = THREE.MathUtils.degToRad(-80); // Lower limit (look down)
+                            this.camera.object3D.rotation.x = Math.max(minPitch, Math.min(maxPitch, newPitch));
+                        }
+                    }
+                } else {
+                    // Tank Control Phase
+                    // Left Pad: Tank movement and rotation
+                    if (this.leftActive) {
+                        const padRect = this.leftPad.getBoundingClientRect();
+                        const padCenterX = padRect.left + padRect.width / 2;
+                        const padCenterY = padRect.top + padRect.height / 2;
+                        const maxRadius = padRect.width / 2;
+
+                        const x = (this.leftCurrentX - padCenterX) / maxRadius; // Range from -1 to 1
+                        const y = (this.leftCurrentY - padCenterY) / maxRadius; // Range from -1 to 1
+
+                        // Forward/backward movement (Y-axis of joystick)
+                        // Negative 'y' = up, positive 'y' = down.
+                        // To make 'up' mean forward (negative Z), we use 'y' directly.
+                        this.velocity.set(0, 0, y * this.data.tankSpeed * deltaSeconds);
+
+                        // Apply movement in the tank's local direction
+                        this.tank.object3D.translateOnAxis(this.velocity, 1);
+
+                        // Tank rotation (X-axis of joystick)
+                        const rotationAmount = -x * this.data.tankRotationSpeed * deltaSeconds; // -x for intuitive turning
+                        this.tank.object3D.rotation.y += THREE.MathUtils.degToRad(rotationAmount);
+                    }
+
+                    // Right Pad: Turret rotation (horizontal) and cannon (vertical)
+                    // ONLY apply right pad logic if NOT in look around mode
+                    if (this.rightActive && !this.isLookingAround) {
+                        const padRect = this.rightPad.getBoundingClientRect();
+                        const padCenterX = padRect.left + padRect.width / 2;
+                        const padCenterY = padRect.top + padRect.height / 2;
+                        const maxRadius = padRect.width / 2;
+
+                        const x = (this.rightCurrentX - padCenterX) / maxRadius;
+                        const y = (this.rightCurrentY - padCenterY) / maxRadius;
+
+                        // Rotate the turret around its local Y-axis (horizontal pad movement)
+                        const turretRotationAmount = -x * this.data.turretRotationSpeed * deltaSeconds;
+                        this.turret.object3D.rotation.y += THREE.MathUtils.degToRad(turretRotationAmount);
+
+                        // Pitch the cannon around its local X-axis (vertical pad movement)
+                        // Negative 'y' = up, positive 'y' = down.
+                        // To make 'up' on the pad pitch the cannon up (negative X rotation), we use 'y' directly.
+                        const cannonPitchAmount = y * this.data.cannonPitchSpeed * deltaSeconds;
+                        let currentCannonPitch = this.cannon.object3D.rotation.x;
+                        let newCannonPitch = currentCannonPitch + THREE.MathUtils.degToRad(cannonPitchAmount);
+
+                        // Cannon pitch limits (example: -20 degrees to 45 degrees)
+                        const maxCannonPitch = THREE.MathUtils.degToRad(1); // Max upward angle
+                        const minCannonPitch = THREE.MathUtils.degToRad(-4.5); // Max downward angle
+                        this.cannon.object3D.rotation.x = Math.max(minCannonPitch, Math.min(maxCannonPitch, newCannonPitch));
+                    }
+
+                    // Update HUD in tank control phase
+                    this.updateHUD();
+                }
+
+                // Update projectiles
+                for (let i = this.projectiles.length - 1; i >= 0; i--) {
+                    const projectile = this.projectiles[i];
+                    // Ensure the projectile still exists in the scene before trying to access its properties
+                    if (!projectile.parentNode) {
+                        this.projectiles.splice(i, 1); // Remove if no longer in scene
+                        continue;
+                    }
+
+                    // Apply gravity to projectile velocity
+                    // Ensure userData.velocity exists before using it
+                    if (projectile.userData && projectile.userData.velocity) {
+                        projectile.userData.velocity.y -= this.data.gravity * deltaSeconds;
+                        // Update projectile position
+                        projectile.object3D.position.addScaledVector(projectile.userData.velocity, deltaSeconds);
+                        // console.log(`Projectile ${i} velocity:`, projectile.userData.velocity); // Debug log
+                    } else {
+                        // console.log(`Projectile ${i} has no valid velocity data.`); // Debug log
+                    }
+
+                    // Decrease projectile life
+                    let life = parseFloat(projectile.getAttribute('life')) - deltaTime;
+                    projectile.setAttribute('life', life);
+
+                    if (life <= 0) {
+                        projectile.parentNode.removeChild(projectile); // Remove from scene
+                        this.projectiles.splice(i, 1); // Remove from tracking array
+                    }
+                }
+            },
+
+            // Function to fire the cannon
+            fireCannon: function () {
+                // Get the cannon's position and direction in global space
+                const cannonWorldPos = new THREE.Vector3();
+                this.cannon.object3D.getWorldPosition(cannonWorldPos);
+
+                const cannonWorldDir = new THREE.Vector3();
+                // Get the cannon's "forward" direction (its local Z-axis)
+                this.cannon.object3D.getWorldDirection(cannonWorldDir);
+
+                console.log('Cannon World Position:', cannonWorldPos);
+                console.log('Cannon World Direction:', cannonWorldDir);
+
+                // Calculate the projectile's initial position slightly in front of the cannon tip
+                // The cannon points along the positive local Z-axis.
+                // Multiplier adjusted so the projectile appears more clearly out of the cannon.
+                const projectileStartPos = cannonWorldPos.clone().add(cannonWorldDir.multiplyScalar(1.5));
+
+                // Create the projectile entity as a cone
+                const projectile = document.createElement('a-cone');
+                projectile.setAttribute('radius-bottom', '0.2'); // Base radius
+                projectile.setAttribute('radius-top', '0.05'); // Top radius for a pointed cone
+                projectile.setAttribute('height', '0.5'); // Height of the cone
+                projectile.setAttribute('color', '#FFFF00'); // Yellow color for the projectile
+                projectile.setAttribute('position', `${projectileStartPos.x} ${projectileStartPos.y} ${projectileStartPos.z}`);
+
+                // Orient the cone to point in the direction of fire.
+                // By default, A-Frame cones point along the Y-axis.
+                // We need to rotate it to align with the cannon's forward direction.
+                // The cannon's forward is its local Z-axis, which is the world direction.
+                // If cannonWorldDir.z is positive, it's pointing towards positive Z (default A-Frame cone is along Y).
+                // We want the cone's Y-axis to align with the cannonWorldDir.
+                // A simple way to align a cone (whose default axis is Y) with a direction vector is to use lookAt,
+                // but A-Frame entities don't have a direct lookAt on their object3D for setting initial rotation.
+                // Instead, we can calculate the rotation to align its local Y-axis with cannonWorldDir.
+                // For a cone that points along its local Y-axis, we want its Y-axis to be the cannonWorldDir.
+                // We can set its rotation to point from (0,0,0) to cannonWorldDir.
+                const tempTarget = new THREE.Vector3().addVectors(projectileStartPos, cannonWorldDir.multiplyScalar(1));
+                projectile.object3D.lookAt(tempTarget);
+                // Adjust rotation by 90 degrees around X to make the cone point forward (along Z)
+                // if it was initially pointing up (along Y).
+                // Or, more accurately, we need to rotate it so its local Y-axis aligns with the desired direction.
+                // A-Frame's default cone points up (+Y). We want it to point along the cannon's direction.
+                // If cannonWorldDir is (0,0,-1) (straight forward), we need to rotate the cone by -90 degrees around X.
+                // If cannonWorldDir is (1,0,0) (right), we need to rotate it by +90 degrees around Z.
+
+                // A simpler approach for A-Frame entities is to set the rotation attribute directly.
+                // Since the cannonWorldDir is already the world direction, we can use a temporary object
+                // to get the Euler angles.
+                const tempObject = new THREE.Object3D();
+                tempObject.position.copy(projectileStartPos);
+                tempObject.lookAt(cannonWorldPos.clone().add(cannonWorldDir.multiplyScalar(10))); // Look far ahead
+                // Now, tempObject's rotation aligns with cannonWorldDir.
+                // We need to apply this rotation to the cone, but also account for the cone's default orientation.
+                // A-Frame's cone is oriented along the Y-axis. To make it point along the Z-axis (forward),
+                // it needs a -90 degree rotation around the X-axis.
+                tempObject.rotateX(THREE.MathUtils.degToRad(-90)); // Adjust for cone's default orientation
+
+                projectile.object3D.rotation.copy(tempObject.rotation);
+
+
+                // Set initial projectile velocity
+                const initialVelocity = cannonWorldDir.clone().multiplyScalar(this.data.projectileSpeed);
+                projectile.userData = { velocity: initialVelocity }; // Store velocity in userData
+
+                // Set a "life" for the projectile (e.g., 5 seconds)
+                projectile.setAttribute('life', '5000'); // Life in milliseconds
+
+                this.el.sceneEl.appendChild(projectile); // Add the projectile to the scene
+                this.projectiles.push(projectile); // Add to tracking array
+                console.log('Projectile created at:', projectileStartPos, 'with velocity:', initialVelocity);
+            },
+
+
+            // Function to mount the tank (switch to control phase)
+            mountTank: function () {
+                this.isMounted = true;
+                this.hudContainer.style.display = 'flex'; // Show HUD
+                this.canMount = false; // Prevent immediate re-mounting
+
+                // Disable camera's look-controls and movement-controls in mounted phase
+                this.camera.removeAttribute('look-controls');
+                this.cameraRig.removeAttribute('movement-controls');
+
+                // Position the camera rig relative to the turret
+                // This makes the camera rotate with the turret
+                this.turret.object3D.add(this.cameraRig.object3D);
+                // Adjust cameraRig position relative to the turret for a good internal view
+                // Camera itself has position="0 1.7 0", so setting cameraRig to 0,0,0 relative to turret
+                // means camera will be at turret's origin + 1.7 in Y.
+                // To get a lower view, we set cameraRig's local Y to a negative value.
+                // Let's aim for a camera world Y of around 2.5m. Tank base is at 1.7m.
+                // So, cameraRig local Y relative to turret = (2.5 - 1.7) - 1.7 (camera's own Y offset) = -0.9
+                this.cameraRig.object3D.position.set(0, -0.9, 0); // Position relative to turret
+                this.cameraRig.object3D.rotation.set(0, 59.7, 0); // Reset camera rig rotation relative to parent (turret)
+                this.camera.object3D.position.set(0, 4.7, 0); // Camera is 1.7 units above its rig's origin
+                this.camera.object3D.rotation.set(0, 0, 0); // Reset camera rotation, look-controls will take over
+            },
+
+            // Function to exit the tank (switch to exploration phase)
+            exitTank: function () {
+                if (!this.isMounted) return; // Only exit if currently mounted
+
+                this.isMounted = false;
+                this.hudContainer.style.display = 'none'; // Hide HUD
+
+                // Get the current world position and quaternion of the CAMERA itself
+                const cameraWorldPos = new THREE.Vector3();
+                this.camera.object3D.getWorldPosition(cameraWorldPos);
+                const cameraWorldQuaternion = new THREE.Quaternion();
+                this.camera.object3D.getWorldQuaternion(cameraWorldQuaternion);
+
+                // Remove cameraRig from turret and add it back to the scene
+                this.turret.object3D.remove(this.cameraRig.object3D);
+                this.sceneEl.object3D.add(this.cameraRig.object3D);
+
+                // Set cameraRig's position to maintain the camera's horizontal world position,
+                // but set its Y to 0 so the camera (at 0 1.7 0 relative to rig) is at 1.7m world Y.
+                this.cameraRig.object3D.position.set(cameraWorldPos.x, 0, cameraWorldPos.z);
+                // Apply the camera's world rotation to the cameraRig
+                this.cameraRig.object3D.quaternion.copy(cameraWorldQuaternion);
+
+                // Reset camera's local position and rotation (it's now a child of cameraRig, which is in world space)
+                this.camera.object3D.position.set(0, 1.7, 5);
+                this.camera.object3D.rotation.set(0, 0, 0);
+
+                // Re-enable camera's look-controls and movement-controls for exploration
+                this.camera.setAttribute('look-controls', '');
+                this.cameraRig.setAttribute('movement-controls', '');
+
+                // Reset look around mode and re-enable controls if they were disabled
+                this.isLookingAround = false;
+                this.rightPad.style.pointerEvents = 'auto';
+                this.rightStick.style.opacity = '1';
+                this.fireButton.style.pointerEvents = 'auto';
+                this.fireButton.style.opacity = '1';
+
+                // Add a cooldown to prevent immediate re-mounting
+                this.canMount = false;
+                setTimeout(() => {
+                    this.canMount = true;
+                    console.log('Puedes volver a montar el tanque.');
+                }, 1000); // 1 segundo de enfriamiento
+            },
+
+            // Function to update HUD information
+            updateHUD: function () {
+                const tankPos = this.tank.object3D.position;
+                const tankRot = this.tank.object3D.rotation;
+                const turretRot = this.turret.object3D.rotation;
+                const cannonPitch = this.cannon.object3D.rotation;
+
+                this.tankPosDisplay.textContent = `Posición Tanque: X: ${tankPos.x.toFixed(2)} Y: ${tankPos.y.toFixed(2)} Z: ${tankPos.z.toFixed(2)}`;
+                this.tankRotDisplay.textContent = `Rotación Tanque: Y: ${THREE.MathUtils.radToDeg(tankRot.y).toFixed(2)}`;
+                this.turretRotDisplay.textContent = `Rotación Torreta: Y: ${THREE.MathUtils.radToDeg(turretRot.y).toFixed(2)}`;
+                this.cannonPitchDisplay.textContent = `Inclinación Cañón: X: ${THREE.MathUtils.radToDeg(cannonPitch.x).toFixed(2)}`;
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const scene = document.querySelector('a-scene');
+            scene.setAttribute('game-controller', '');
+        });
+    </script>
+</body>
+
+</html>
