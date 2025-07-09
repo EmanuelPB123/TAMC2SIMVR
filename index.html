@@ -135,7 +135,8 @@
         .exit-button {
             width: 100px;
             height: 100px;
-            background-color: rgba(255, 165, 0, 0.6); /* Naranja */
+            background-color: rgba(255, 165, 0, 0.6);
+            /* Naranja */
             border-radius: 50%;
             display: flex;
             justify-content: center;
@@ -157,9 +158,9 @@
         <a-scene>
             <a-assets>
                 <!-- Asset items for the GLB models -->
-                <a-asset-item id="model-base" src="base.glb"></a-asset-item>
-                <a-asset-item id="model-turret" src="turret.glb"></a-asset-item>
-                <a-asset-item id="model-cannon" src="cannon.glb"></a-asset-item>
+                <a-asset-item id="model-base" src="/def/base.glb"></a-asset-item>
+                <a-asset-item id="model-turret" src="/def/turret.glb"></a-asset-item>
+                <a-asset-item id="model-cannon" src="/def/cannon.glb"></a-asset-item>
             </a-assets>
 
             <!-- Camera Rig: Used to move the camera in the exploration phase. -->
@@ -176,7 +177,8 @@
                 <a-entity id="tank-turret" gltf-model="#model-turret" position="0 0.0 0" scale="1 1 1">
                     <!-- Tank Cannon: Child of the turret so it rotates with it.
                          We've added an ID to be able to control it individually. -->
-                    <a-entity id="tank-cannon" gltf-model="#model-cannon" position="0 -0.1 0.15" scale="1 1 1"></a-entity>
+                    <a-entity id="tank-cannon" gltf-model="#model-cannon" position="0 -0.1 0.15" scale="1 1 1">
+                    </a-entity>
                 </a-entity>
             </a-entity>
 
@@ -187,7 +189,6 @@
             <a-sky color="#87CEEB"></a-sky>
 
             <!-- Lights: Add an ambient and a directional light to illuminate the scene -->
-<!--             <a-entity light="type: ambient; color: #BBB"></a-entity> -->
             <a-entity light="type: directional; color: #FFF; intensity: 0.6" position="-1 1 1"></a-entity>
         </a-scene>
     </div>
@@ -226,25 +227,82 @@
         // Main game component that manages control phases
         AFRAME.registerComponent('game-controller', {
             schema: {
-                tankId: { type: 'string', default: 'tank-base' },
-                turretId: { type: 'string', default: 'tank-turret' },
-                cannonId: { type: 'string', default: 'tank-cannon' }, // Cannon ID
-                cameraId: { type: 'string', default: 'camera' },
-                cameraRigId: { type: 'string', default: 'camera-rig' },
-                mountDistance: { type: 'number', default: 3 }, // Distance to "mount" the tank
-                explorationSpeed: { type: 'number', default: 3 }, // Camera speed in exploration
-                tankSpeed: { type: 'number', default: 5 }, // Tank speed
-                tankRotationSpeed: { type: 'number', default: 90 }, // Tank rotation speed
-                turretRotationSpeed: { type: 'number', default: 60 }, // Turret rotation speed
-                cannonPitchSpeed: { type: 'number', default: 45 }, // Cannon pitch speed
-                leftPadId: { type: 'string', default: 'leftPad' },
-                rightPadId: { type: 'string', default: 'rightPad' },
-                fireButtonId: { type: 'string', default: 'fireButton' }, // Fire button ID
-                lookAroundButtonId: { type: 'string', default: 'lookAroundButton' }, // New: Look around button ID
-                exitTankButtonId: { type: 'string', default: 'exitTankButton' }, // New: Exit tank button ID
-                projectileSpeed: { type: 'number', default: 20 }, // Projectile speed
-                fireCooldown: { type: 'number', default: 500 }, // Cooldown time between shots in milliseconds
-                gravity: { type: 'number', default: 9.8 } // Gravity for projectiles
+                tankId: {
+                    type: 'string',
+                    default: 'tank-base'
+                },
+                turretId: {
+                    type: 'string',
+                    default: 'tank-turret'
+                },
+                cannonId: {
+                    type: 'string',
+                    default: 'tank-cannon'
+                }, // Cannon ID
+                cameraId: {
+                    type: 'string',
+                    default: 'camera'
+                },
+                cameraRigId: {
+                    type: 'string',
+                    default: 'camera-rig'
+                },
+                mountDistance: {
+                    type: 'number',
+                    default: 3
+                }, // Distance to "mount" the tank
+                explorationSpeed: {
+                    type: 'number',
+                    default: 3
+                }, // Camera speed in exploration
+                tankSpeed: {
+                    type: 'number',
+                    default: 5
+                }, // Tank speed
+                tankRotationSpeed: {
+                    type: 'number',
+                    default: 45
+                }, // Tank rotation speed (reduced for slower turn)
+                turretRotationSpeed: {
+                    type: 'number',
+                    default: 60
+                }, // Turret rotation speed
+                cannonPitchSpeed: {
+                    type: 'number',
+                    default: 45
+                }, // Cannon pitch speed
+                leftPadId: {
+                    type: 'string',
+                    default: 'leftPad'
+                },
+                rightPadId: {
+                    type: 'string',
+                    default: 'rightPad'
+                },
+                fireButtonId: {
+                    type: 'string',
+                    default: 'fireButton'
+                }, // Fire button ID
+                lookAroundButtonId: {
+                    type: 'string',
+                    default: 'lookAroundButton'
+                }, // New: Look around button ID
+                exitTankButtonId: {
+                    type: 'string',
+                    default: 'exitTankButton'
+                }, // New: Exit tank button ID
+                projectileSpeed: {
+                    type: 'number',
+                    default: 20
+                }, // Projectile speed
+                fireCooldown: {
+                    type: 'number',
+                    default: 500
+                }, // Cooldown time between shots in milliseconds
+                gravity: {
+                    type: 'number',
+                    default: 9.8
+                } // Gravity for projectiles
             },
 
             init: function () {
@@ -278,13 +336,24 @@
 
                 this.leftActive = false;
                 this.rightActive = false;
-                this.leftStartX = 0; this.leftStartY = 0;
-                this.rightStartX = 0; this.rightStartY = 0;
-                this.leftCurrentX = 0; this.leftCurrentY = 0;
-                this.rightCurrentX = 0; this.rightCurrentY = 0;
+                this.leftStartX = 0;
+                this.leftStartY = 0;
+                this.rightStartX = 0;
+                this.rightStartY = 0;
+                this.leftCurrentX = 0;
+                this.leftCurrentY = 0;
+                this.rightCurrentX = 0;
+                this.rightCurrentY = 0;
 
                 // Vectors for movement and rotation calculations
-                this.velocity = new THREE.Vector3();
+                this.currentTankVelocity = new THREE.Vector3(); // Current velocity for inertia
+                this.targetTankVelocity = new THREE.Vector3(); // Target velocity based on input
+                this.currentTankRotation = 0; // Current angular velocity for inertia
+                this.targetTankRotation = 0; // Target angular velocity based on input
+
+                // Lerp factors for smooth movement and rotation
+                this.tankMovementLerpFactor = 0.05; // Adjust for more/less inertia (0.01 for heavy, 0.1 for lighter)
+                this.tankRotationLerpFactor = 0.05; // Adjust for more/less inertia in rotation
 
                 this.setupPadListeners();
                 this.initialCameraSetup();
@@ -330,9 +399,15 @@
             // Helper function to get event coordinates (mouse or touch)
             getCoords: function (evt) {
                 if (evt.touches && evt.touches.length > 0) {
-                    return { x: evt.touches[0].clientX, y: evt.touches[0].clientY };
+                    return {
+                        x: evt.touches[0].clientX,
+                        y: evt.touches[0].clientY
+                    };
                 }
-                return { x: evt.clientX, y: evt.clientY };
+                return {
+                    x: evt.clientX,
+                    y: evt.clientY
+                };
             },
 
             // --- Left Pad Logic ---
@@ -361,6 +436,9 @@
                 this.leftCurrentX = this.leftStartX;
                 this.leftCurrentY = this.leftStartY;
                 this.resetStickPosition(this.leftStick);
+                // Reset target velocities when pad is released
+                this.targetTankVelocity.set(0, 0, 0);
+                this.targetTankRotation = 0;
             },
 
             // --- Right Pad Logic ---
@@ -546,18 +624,26 @@
                         const x = (this.leftCurrentX - padCenterX) / maxRadius; // Range from -1 to 1
                         const y = (this.leftCurrentY - padCenterY) / maxRadius; // Range from -1 to 1
 
-                        // Forward/backward movement (Y-axis of joystick)
-                        // Negative 'y' = up, positive 'y' = down.
-                        // To make 'up' mean forward (negative Z), we use 'y' directly.
-                        this.velocity.set(0, 0, y * this.data.tankSpeed * deltaSeconds);
+                        // Set target forward/backward velocity (inverted: positive y on pad is forward)
+                        this.targetTankVelocity.set(0, 0, -y * this.data.tankSpeed * deltaSeconds);
 
-                        // Apply movement in the tank's local direction
-                        this.tank.object3D.translateOnAxis(this.velocity, 1);
+                        // Set target angular velocity for rotation (equal speed for left/right)
+                        this.targetTankRotation = -x * this.data.tankRotationSpeed * deltaSeconds;
 
-                        // Tank rotation (X-axis of joystick)
-                        const rotationAmount = -x * this.data.tankRotationSpeed * deltaSeconds; // -x for intuitive turning
-                        this.tank.object3D.rotation.y += THREE.MathUtils.degToRad(rotationAmount);
+                    } else {
+                        // If pad is not active, smoothly decelerate
+                        this.targetTankVelocity.set(0, 0, 0);
+                        this.targetTankRotation = 0;
                     }
+
+                    // Apply inertia to movement
+                    this.currentTankVelocity.lerp(this.targetTankVelocity, this.tankMovementLerpFactor);
+                    this.tank.object3D.translateOnAxis(this.currentTankVelocity, 1);
+
+                    // Apply inertia to rotation
+                    this.currentTankRotation = THREE.MathUtils.lerp(this.currentTankRotation, this.targetTankRotation, this.tankRotationLerpFactor);
+                    this.tank.object3D.rotation.y += THREE.MathUtils.degToRad(this.currentTankRotation);
+
 
                     // Right Pad: Turret rotation (horizontal) and cannon (vertical)
                     // ONLY apply right pad logic if NOT in look around mode
@@ -685,7 +771,9 @@
 
                 // Set initial projectile velocity
                 const initialVelocity = cannonWorldDir.clone().multiplyScalar(this.data.projectileSpeed);
-                projectile.userData = { velocity: initialVelocity }; // Store velocity in userData
+                projectile.userData = {
+                    velocity: initialVelocity
+                }; // Store velocity in userData
 
                 // Set a "life" for the projectile (e.g., 5 seconds)
                 projectile.setAttribute('life', '5000'); // Life in milliseconds
